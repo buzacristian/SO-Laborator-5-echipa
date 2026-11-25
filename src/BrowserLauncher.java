@@ -1,5 +1,6 @@
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -7,7 +8,13 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -17,11 +24,14 @@ import java.util.stream.Stream;
  */
 public class BrowserLauncher {
     static final long DEFAULT_LIMIT_S = 600;
+    static final long GRACE_S = 10;
     static final List<String> DEFAULT_URLS = List.of(
         "https://utm.md",
         "https://docs.oracle.com/en/java/javase/25/docs/api/"
             + "java.base/java/lang/ProcessBuilder.html",
         "https://man7.org/linux/man-pages/man2/fork.2.html");
+
+    static PrintWriter logFile;
 
     public static void main(String[] args) throws Exception {
         long limit = DEFAULT_LIMIT_S;
@@ -37,6 +47,8 @@ public class BrowserLauncher {
         }
         if (urls.isEmpty()) urls = DEFAULT_URLS;
         Files.createDirectories(dir);
+        logFile = new PrintWriter(
+            Files.newBufferedWriter(dir.resolve("launcher.log")), true);
 
         Path profile = Files.createTempDirectory("so5-profil-");
         List<String> cmd = browserCommand(profile, urls);
@@ -56,13 +68,75 @@ public class BrowserLauncher {
         info.limitSeconds = limit;
         info.write(dir.resolve("session.txt"));
 
+        // proces cu descendentii vazuti pana acum
+        Set<ProcessHandle> seen = ConcurrentHashMap.newKeySet();
+        ScheduledExecutorService timer =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r);
+                t.setDaemon(true);
+                return t;
+            });
+        timer.scheduleAtFixedRate(
+            () -> seen.addAll(browser.descendants().toList()),
+            2, 5, TimeUnit.SECONDS);
+
+        boolean byTimer = false;
         if (!browser.waitFor(limit, TimeUnit.SECONDS)) {
+            byTimer = true;
             log("Limita de " + limit + " s a fost atinsa");
-            browser.destroy();
-            browser.waitFor();
+            closeBrowser(browser, seen, profile);
+        } else {
+            log("Browserul s-a inchis inainte de limita");
         }
+        timer.shutdownNow();
         log("Browser oprit, cod de iesire " + browser.exitValue());
-        deleteTree(profile);
+        Thread.sleep(2000);
+        log("Procese ramase active: "
+            + instance(browser, seen, profile).size());
+        log("Profil temporar sters: " + deleteTree(profile));
+        logFile.close();
+    }
+
+    /** Procesul principal, descendentii lui si procesele care
+     *  poarta calea profilului temporar in linia de comanda. */
+    static List<ProcessHandle> instance(Process main,
+            Set<ProcessHandle> seen, Path profile) {
+        Map<Long, ProcessHandle> all = new LinkedHashMap<>();
+        all.put(main.pid(), main.toHandle());
+        main.descendants().forEach(h -> {
+            all.put(h.pid(), h);
+            seen.add(h);
+        });
+        seen.forEach(h -> all.put(h.pid(), h));
+        ProcessHandle.allProcesses()
+            .filter(h -> h.info().commandLine()
+                .map(c -> c.contains(profile.toString()))
+                .orElse(false))
+            .forEach(h -> all.putIfAbsent(h.pid(), h));
+        all.remove(ProcessHandle.current().pid());
+        return all.values().stream()
+            .filter(ProcessHandle::isAlive).toList();
+    }
+
+    /** destroy() pentru toate procesele, apoi destroyForcibly()
+     *  pentru cele ramase active dupa perioada de gratie. */
+    static void closeBrowser(Process main, Set<ProcessHandle> seen,
+            Path profile) throws InterruptedException {
+        List<ProcessHandle> group = instance(main, seen, profile);
+        log("Inchid " + group.size() + " procese cu destroy()");
+        main.destroy();
+        group.stream().filter(h -> h.pid() != main.pid())
+            .forEach(ProcessHandle::destroy);
+        long deadline = System.nanoTime() + GRACE_S * 1_000_000_000L;
+        while (System.nanoTime() < deadline
+                && group.stream().anyMatch(ProcessHandle::isAlive))
+            Thread.sleep(200);
+        for (ProcessHandle h : group) {
+            if (h.isAlive()) {
+                log("destroyForcibly() pentru PID " + h.pid());
+                h.destroyForcibly();
+            }
+        }
     }
 
     /** Comanda de pornire, cu profil separat de cel al utilizatorului. */
@@ -132,9 +206,11 @@ public class BrowserLauncher {
         return Files.notExists(dir);
     }
 
-    static void log(String msg) {
-        System.out.println("[" + LocalTime.now().format(
+    static synchronized void log(String msg) {
+        String line = "[" + LocalTime.now().format(
             DateTimeFormatter.ofPattern("HH:mm:ss"))
-            + "] [lansator] " + msg);
+            + "] [lansator] " + msg;
+        System.out.println(line);
+        if (logFile != null) logFile.println(line);
     }
 }
