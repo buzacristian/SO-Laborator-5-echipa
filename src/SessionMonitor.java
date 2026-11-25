@@ -53,7 +53,9 @@ public class SessionMonitor {
         timer.scheduleAtFixedRate(() -> report(browser), interval,
             interval, TimeUnit.SECONDS);
 
-        browser.onExit().get();
+        // onExit() pe un proces care nu e copil a avut o intarziere
+        // de aproape 2 s la proba, deci sondez isAlive() la 100 ms
+        while (browser.isAlive()) Thread.sleep(100);
         long endMillis = System.currentTimeMillis();
         timer.shutdownNow();
 
