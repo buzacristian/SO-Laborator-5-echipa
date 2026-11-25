@@ -95,6 +95,14 @@ public class BrowserLauncher {
 
         // descendentii observati pana acum
         Set<ProcessHandle> seen = ConcurrentHashMap.newKeySet();
+        // la Ctrl+C sau SIGTERM browserul nu ramane deschis
+        Thread hook = new Thread(() -> {
+            try {
+                closeBrowser(browser, seen, profile);
+                deleteTree(profile);
+            } catch (Exception e) { /* iesire fortata */ }
+        });
+        Runtime.getRuntime().addShutdownHook(hook);
         ScheduledExecutorService timer =
             Executors.newSingleThreadScheduledExecutor(r -> {
                 Thread t = new Thread(r);
@@ -132,6 +140,7 @@ public class BrowserLauncher {
         log("Procese ramase active: "
             + instance(browser, seen, profile).size());
         log("Profil temporar sters: " + deleteTree(profile));
+        Runtime.getRuntime().removeShutdownHook(hook);
         logFile.close();
     }
 
