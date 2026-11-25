@@ -123,11 +123,23 @@ public class BrowserLauncher {
             monitor.destroyForcibly();
         }
         log("Monitor oprit, cod de iesire " + monitor.exitValue());
+        printStatus(statusFile);
         Thread.sleep(2000);
         log("Procese ramase active: "
             + instance(browser, seen, profile).size());
         log("Profil temporar sters: " + deleteTree(profile));
         logFile.close();
+    }
+
+    /** Afiseaza fisierul de stare scris de monitor. */
+    static void printStatus(Path statusFile) throws IOException {
+        if (Files.notExists(statusFile)) {
+            log("Monitorul nu a scris fisierul de stare");
+            return;
+        }
+        log("Rezumatul primit de la monitor:");
+        for (String line : Files.readAllLines(statusFile))
+            log("  " + line);
     }
 
     static int freePort() throws IOException {
