@@ -108,14 +108,12 @@ public class BrowserLauncher {
         timer.schedule(() -> listTabs(port), Math.min(15,
             Math.max(5, cap / 4)), TimeUnit.SECONDS);
 
-        boolean byTimer = false;
-        if (!browser.waitFor(limit, TimeUnit.SECONDS)) {
-            byTimer = true;
-            log("Limita de " + limit + " s a fost atinsa");
-            closeBrowser(browser, seen, profile);
-        } else {
+        if (browser.waitFor(limit, TimeUnit.SECONDS))
             log("Browserul s-a inchis inainte de limita");
-        }
+        else
+            log("Limita de " + limit + " s a fost atinsa");
+        // dupa limita inchide browserul, altfel doar ce a ramas
+        closeBrowser(browser, seen, profile);
         timer.shutdownNow();
         log("Browser oprit, cod de iesire " + browser.exitValue());
         if (!monitor.waitFor(GRACE_S + 5, TimeUnit.SECONDS)) {
@@ -201,6 +199,10 @@ public class BrowserLauncher {
     static void closeBrowser(Process main, Set<ProcessHandle> seen,
             Path profile) throws InterruptedException {
         List<ProcessHandle> group = instance(main, seen, profile);
+        if (group.isEmpty()) {
+            log("Nu a ramas niciun proces de inchis");
+            return;
+        }
         log("Inchid " + group.size() + " procese cu destroy()");
         main.destroy();
         group.stream().filter(h -> h.pid() != main.pid())
