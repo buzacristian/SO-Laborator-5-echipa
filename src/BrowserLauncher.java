@@ -43,11 +43,14 @@ public class BrowserLauncher {
 
     public static void main(String[] args) throws Exception {
         long limit = DEFAULT_LIMIT_S;
+        long interval = 30;
         Path dir = Path.of("sesiune");
         List<String> urls = new ArrayList<>();
         for (String a : args) {
             if (a.startsWith("--dir="))
                 dir = Path.of(a.substring(6));
+            else if (a.startsWith("--interval="))
+                interval = Long.parseLong(a.substring(11));
             else if (a.matches("\\d+") && urls.isEmpty())
                 limit = Long.parseLong(a);
             else
@@ -75,7 +78,20 @@ public class BrowserLauncher {
         info.profile = profile.toString();
         info.startTime = started.toString();
         info.limitSeconds = limit;
-        info.write(dir.resolve("session.txt"));
+        Path sessionFile = dir.resolve("session.txt");
+        Path statusFile = dir.resolve("status.txt");
+        info.write(sessionFile);
+
+        // programul B citeste fisierul de sesiune scris mai sus
+        Process monitor = new ProcessBuilder(
+                System.getProperty("java.home") + "/bin/java",
+                "-cp", System.getProperty("java.class.path"),
+                "SessionMonitor", sessionFile.toString(),
+                statusFile.toString(), String.valueOf(interval),
+                dir.resolve("monitor.log").toString())
+            .inheritIO()
+            .start();
+        log("Monitor pornit, PID " + monitor.pid());
 
         // descendentii observati pana acum
         Set<ProcessHandle> seen = ConcurrentHashMap.newKeySet();
@@ -102,6 +118,11 @@ public class BrowserLauncher {
         }
         timer.shutdownNow();
         log("Browser oprit, cod de iesire " + browser.exitValue());
+        if (!monitor.waitFor(GRACE_S + 5, TimeUnit.SECONDS)) {
+            log("Monitorul nu s-a oprit, il opresc");
+            monitor.destroyForcibly();
+        }
+        log("Monitor oprit, cod de iesire " + monitor.exitValue());
         Thread.sleep(2000);
         log("Procese ramase active: "
             + instance(browser, seen, profile).size());
