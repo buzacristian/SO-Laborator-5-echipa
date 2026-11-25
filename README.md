@@ -5,8 +5,11 @@ urmarit si inchis automat dupa 10 minute.
 
 ## Programe
 
-(de completat)
+SessionMonitor (programul B) citeste `session.txt`, se ataseaza la
+procesul browserului si afiseaza periodic starea lui pana cand
+procesul se incheie.
 
 ## Rulare
 
-(de completat)
+    javac -d out src/*.java
+    java -cp out SessionMonitor session.txt [interval]
