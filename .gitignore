@@ -1,0 +1,4 @@
+out/
+sesiune/
+*.log
+.DS_Store
