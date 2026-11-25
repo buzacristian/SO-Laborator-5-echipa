@@ -5,8 +5,11 @@ urmarit si inchis automat dupa 10 minute.
 
 ## Programe
 
-(de completat)
+BrowserLauncher (programul A) porneste un Chrome separat, cu un
+profil temporar propriu si trei file. Scrie in `session.txt` PID-ul
+browserului si calea profilului.
 
 ## Rulare
 
-(de completat)
+    javac -d out src/*.java
+    java -cp out BrowserLauncher [secunde] [URL ...]
