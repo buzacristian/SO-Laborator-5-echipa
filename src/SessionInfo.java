@@ -8,11 +8,25 @@ import java.util.Map;
 public class SessionInfo {
     public long pid;
     public String profile;
+    public long startMillis;
+    public long limitSeconds;
+    // rezultatul observat de monitor
+    public boolean finished;
+    public double livedSeconds;
+    public boolean earlyClose;
+    public int maxDescendants;
 
     /** Scrie o linie cheie=valoare pentru fiecare camp. */
     public void write(Path file) throws IOException {
         String text = "pid=" + pid + "\n"
-            + "profile=" + profile + "\n";
+            + "profile=" + profile + "\n"
+            + "startMillis=" + startMillis + "\n"
+            + "limitSeconds=" + limitSeconds + "\n";
+        if (finished) {
+            text += "livedSeconds=" + livedSeconds + "\n"
+                + "earlyClose=" + earlyClose + "\n"
+                + "maxDescendants=" + maxDescendants + "\n";
+        }
         Files.writeString(file, text);
     }
 
@@ -25,6 +39,14 @@ public class SessionInfo {
         SessionInfo s = new SessionInfo();
         s.pid = Long.parseLong(m.get("pid"));
         s.profile = m.get("profile");
+        s.startMillis = Long.parseLong(m.get("startMillis"));
+        s.limitSeconds = Long.parseLong(m.get("limitSeconds"));
+        s.finished = m.containsKey("livedSeconds");
+        if (s.finished) {
+            s.livedSeconds = Double.parseDouble(m.get("livedSeconds"));
+            s.earlyClose = Boolean.parseBoolean(m.get("earlyClose"));
+            s.maxDescendants = Integer.parseInt(m.get("maxDescendants"));
+        }
         return s;
     }
 }
