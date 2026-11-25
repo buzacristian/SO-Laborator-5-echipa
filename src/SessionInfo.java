@@ -10,6 +10,11 @@ public class SessionInfo {
     public String profile;
     public String startTime;
     public long limitSeconds;
+    // rezultatul observat de monitor
+    public boolean finished;
+    public double livedSeconds;
+    public boolean earlyClose;
+    public int maxDescendants;
 
     /** Scrie o linie cheie=valoare pentru fiecare camp. */
     public void write(Path file) throws IOException {
@@ -17,6 +22,11 @@ public class SessionInfo {
             + "profile=" + profile + "\n"
             + "startTime=" + startTime + "\n"
             + "limitSeconds=" + limitSeconds + "\n";
+        if (finished) {
+            text += "livedSeconds=" + livedSeconds + "\n"
+                + "earlyClose=" + earlyClose + "\n"
+                + "maxDescendants=" + maxDescendants + "\n";
+        }
         Files.writeString(file, text);
     }
 
@@ -31,6 +41,12 @@ public class SessionInfo {
         s.profile = m.get("profile");
         s.startTime = m.get("startTime");
         s.limitSeconds = Long.parseLong(m.get("limitSeconds"));
+        s.finished = m.containsKey("livedSeconds");
+        if (s.finished) {
+            s.livedSeconds = Double.parseDouble(m.get("livedSeconds"));
+            s.earlyClose = Boolean.parseBoolean(m.get("earlyClose"));
+            s.maxDescendants = Integer.parseInt(m.get("maxDescendants"));
+        }
         return s;
     }
 }
