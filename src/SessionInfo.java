@@ -8,11 +8,15 @@ import java.util.Map;
 public class SessionInfo {
     public long pid;
     public String profile;
+    public String startTime;
+    public long limitSeconds;
 
     /** Scrie o linie cheie=valoare pentru fiecare camp. */
     public void write(Path file) throws IOException {
         String text = "pid=" + pid + "\n"
-            + "profile=" + profile + "\n";
+            + "profile=" + profile + "\n"
+            + "startTime=" + startTime + "\n"
+            + "limitSeconds=" + limitSeconds + "\n";
         Files.writeString(file, text);
     }
 
@@ -25,6 +29,8 @@ public class SessionInfo {
         SessionInfo s = new SessionInfo();
         s.pid = Long.parseLong(m.get("pid"));
         s.profile = m.get("profile");
+        s.startTime = m.get("startTime");
+        s.limitSeconds = Long.parseLong(m.get("limitSeconds"));
         return s;
     }
 }
