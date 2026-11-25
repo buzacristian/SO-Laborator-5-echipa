@@ -2,6 +2,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -45,11 +46,14 @@ public class BrowserLauncher {
             .redirectErrorStream(true)
             .redirectOutput(ProcessBuilder.Redirect.DISCARD)
             .start();
+        Instant started = Instant.now();
         log("Browser pornit, PID " + browser.pid());
 
         SessionInfo info = new SessionInfo();
         info.pid = browser.pid();
         info.profile = profile.toString();
+        info.startTime = started.toString();
+        info.limitSeconds = limit;
         info.write(dir.resolve("session.txt"));
 
         if (!browser.waitFor(limit, TimeUnit.SECONDS)) {

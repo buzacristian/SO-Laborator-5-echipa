@@ -7,7 +7,8 @@ urmarit si inchis automat dupa 10 minute.
 
 BrowserLauncher (programul A) porneste un Chrome separat, cu un
 profil temporar propriu si trei file. Scrie in `session.txt` PID-ul
-browserului si calea profilului.
+browserului, calea profilului, momentul pornirii (ISO-8601) si
+limita de timp in secunde.
 
 ## Rulare
 
