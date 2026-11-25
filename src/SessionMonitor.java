@@ -1,6 +1,7 @@
 import java.nio.file.Path;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.Executors;
@@ -15,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 public class SessionMonitor {
     static final Locale RO = Locale.forLanguageTag("ro");
     static long startMillis;
+    static int maxDescendants = 0;
 
     public static void main(String[] args) throws Exception {
         Path sessionFile = Path.of(args[0]);
@@ -38,15 +40,15 @@ public class SessionMonitor {
                 t.setDaemon(true);
                 return t;
             });
-        timer.scheduleAtFixedRate(() -> log("STARE activ="
-            + browser.isAlive()), interval, interval,
-            TimeUnit.SECONDS);
+        timer.scheduleAtFixedRate(() -> report(browser), interval,
+            interval, TimeUnit.SECONDS);
 
         browser.onExit().get();
         long endMillis = System.currentTimeMillis();
         timer.shutdownNow();
 
         info.finished = true;
+        info.maxDescendants = maxDescendants;
         info.livedSeconds = (endMillis - info.startMillis) / 1000.0;
         info.earlyClose = info.livedSeconds < info.limitSeconds - 1;
         log(String.format(RO, "Procesul s-a incheiat dupa %.1f s",
@@ -57,6 +59,27 @@ public class SessionMonitor {
         else
             log("Inchidere la limita de " + info.limitSeconds + " s");
         info.write(statusFile);
+    }
+
+    /** O linie de stare: activ, descendente si timp CPU. */
+    static void report(ProcessHandle browser) {
+        List<ProcessHandle> kids = browser.descendants().toList();
+        maxDescendants = Math.max(maxDescendants, kids.size());
+        long cpuMs = 0;
+        int known = 0;
+        for (ProcessHandle h : java.util.stream.Stream.concat(
+                java.util.stream.Stream.of(browser), kids.stream())
+                .toList()) {
+            var cpu = h.info().totalCpuDuration();
+            if (cpu.isPresent()) {
+                cpuMs += cpu.get().toMillis();
+                known++;
+            }
+        }
+        String cpuText = known == 0 ? "n/a"
+            : String.format(RO, "%.1f s", cpuMs / 1000.0);
+        log("STARE activ=" + browser.isAlive() + " descendente="
+            + kids.size() + " CPU=" + cpuText);
     }
 
     static void log(String msg) {
