@@ -1,8 +1,14 @@
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.net.ServerSocket;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -16,6 +22,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -51,7 +59,8 @@ public class BrowserLauncher {
             Files.newBufferedWriter(dir.resolve("launcher.log")), true);
 
         Path profile = Files.createTempDirectory("so5-profil-");
-        List<String> cmd = browserCommand(profile, urls);
+        int port = freePort();
+        List<String> cmd = browserCommand(profile, port, urls);
         log("Profil temporar: " + profile);
         log("Comanda: " + String.join(" ", cmd));
         Process browser = new ProcessBuilder(cmd)
@@ -68,7 +77,7 @@ public class BrowserLauncher {
         info.limitSeconds = limit;
         info.write(dir.resolve("session.txt"));
 
-        // proces cu descendentii vazuti pana acum
+        // descendentii observati pana acum
         Set<ProcessHandle> seen = ConcurrentHashMap.newKeySet();
         ScheduledExecutorService timer =
             Executors.newSingleThreadScheduledExecutor(r -> {
@@ -79,6 +88,9 @@ public class BrowserLauncher {
         timer.scheduleAtFixedRate(
             () -> seen.addAll(browser.descendants().toList()),
             2, 5, TimeUnit.SECONDS);
+        long cap = limit;
+        timer.schedule(() -> listTabs(port), Math.min(15,
+            Math.max(5, cap / 4)), TimeUnit.SECONDS);
 
         boolean byTimer = false;
         if (!browser.waitFor(limit, TimeUnit.SECONDS)) {
@@ -95,6 +107,39 @@ public class BrowserLauncher {
             + instance(browser, seen, profile).size());
         log("Profil temporar sters: " + deleteTree(profile));
         logFile.close();
+    }
+
+    static int freePort() throws IOException {
+        try (ServerSocket s = new ServerSocket(0)) {
+            return s.getLocalPort();
+        }
+    }
+
+    /** Citeste http://127.0.0.1:PORT/json/list (DevTools). */
+    static void listTabs(int port) {
+        try {
+            HttpRequest rq = HttpRequest.newBuilder(URI.create(
+                "http://127.0.0.1:" + port + "/json/list"))
+                .timeout(Duration.ofSeconds(2)).build();
+            String body = HttpClient.newHttpClient().send(rq,
+                HttpResponse.BodyHandlers.ofString()).body();
+            List<String> tabs = new ArrayList<>();
+            for (String obj : body.split("\\},\\s*\\{")) {
+                if (field(obj, "type").equals("page"))
+                    tabs.add(field(obj, "title") + " | "
+                        + field(obj, "url"));
+            }
+            log("File deschise: " + tabs.size());
+            tabs.forEach(t -> log("  - " + t));
+        } catch (Exception e) {
+            log("Lista filelor nu a putut fi citita");
+        }
+    }
+
+    static String field(String json, String name) {
+        Matcher m = Pattern.compile("\"" + name
+            + "\":\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").matcher(json);
+        return m.find() ? m.group(1) : "";
     }
 
     /** Procesul principal, descendentii lui si procesele care
@@ -140,7 +185,8 @@ public class BrowserLauncher {
     }
 
     /** Comanda de pornire, cu profil separat de cel al utilizatorului. */
-    static List<String> browserCommand(Path profile, List<String> urls) {
+    static List<String> browserCommand(Path profile, int port,
+                                       List<String> urls) {
         String os = System.getProperty("os.name").toLowerCase();
         List<String> cmd = new ArrayList<>();
         String exe;
@@ -169,6 +215,7 @@ public class BrowserLauncher {
             cmd.add("--user-data-dir=" + profile);
             cmd.add("--no-first-run");
             cmd.add("--no-default-browser-check");
+            cmd.add("--remote-debugging-port=" + port);
             cmd.add("--new-window");
         }
         cmd.addAll(urls);
