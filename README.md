@@ -7,9 +7,13 @@ urmarit si inchis automat dupa 10 minute.
 
 SessionMonitor (programul B) citeste `session.txt`, se ataseaza la
 procesul browserului si afiseaza periodic starea lui pana cand
-procesul se incheie.
+procesul se incheie. La final scrie in `status.txt` durata reala,
+modul de incheiere si numarul maxim de procese descendente.
 
 ## Rulare
 
     javac -d out src/*.java
-    java -cp out SessionMonitor session.txt [interval]
+    java -cp out SessionMonitor session.txt status.txt [interval] [jurnal]
+
+`session.txt` contine campurile pid, profile, startMillis si
+limitSeconds.

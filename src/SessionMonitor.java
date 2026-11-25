@@ -1,3 +1,5 @@
+import java.io.PrintWriter;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -7,6 +9,7 @@ import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 /**
  * Programul B: se ataseaza la procesul descris in fisierul de
@@ -17,11 +20,17 @@ public class SessionMonitor {
     static final Locale RO = Locale.forLanguageTag("ro");
     static long startMillis;
     static int maxDescendants = 0;
+    static PrintWriter logFile;
 
     public static void main(String[] args) throws Exception {
         Path sessionFile = Path.of(args[0]);
         Path statusFile = Path.of(args[1]);
         long interval = args.length > 2 ? Long.parseLong(args[2]) : 30;
+
+        Path logPath = args.length > 3 ? Path.of(args[3])
+            : Path.of("monitor.log");
+        logFile = new PrintWriter(Files.newBufferedWriter(logPath),
+            true);
 
         SessionInfo info = SessionInfo.read(sessionFile);
         startMillis = info.startMillis;
@@ -59,6 +68,16 @@ public class SessionMonitor {
         else
             log("Inchidere la limita de " + info.limitSeconds + " s");
         info.write(statusFile);
+
+        log("===== REZUMAT =====");
+        log(String.format(RO, "Durata activa: %.1f s din limita de "
+            + "%d s", info.livedSeconds, info.limitSeconds));
+        log("Mod de incheiere: " + (info.earlyClose
+            ? "inainte de limita" : "la limita"));
+        log("Procese descendente observate (maxim): "
+            + maxDescendants);
+        log("Fisier de stare scris: " + statusFile);
+        logFile.close();
     }
 
     /** O linie de stare: activ, descendente si timp CPU. */
@@ -67,9 +86,8 @@ public class SessionMonitor {
         maxDescendants = Math.max(maxDescendants, kids.size());
         long cpuMs = 0;
         int known = 0;
-        for (ProcessHandle h : java.util.stream.Stream.concat(
-                java.util.stream.Stream.of(browser), kids.stream())
-                .toList()) {
+        for (ProcessHandle h : Stream.concat(
+                Stream.of(browser), kids.stream()).toList()) {
             var cpu = h.info().totalCpuDuration();
             if (cpu.isPresent()) {
                 cpuMs += cpu.get().toMillis();
@@ -82,10 +100,12 @@ public class SessionMonitor {
             + kids.size() + " CPU=" + cpuText);
     }
 
-    static void log(String msg) {
+    static synchronized void log(String msg) {
         double s = (System.currentTimeMillis() - startMillis) / 1000.0;
-        System.out.println(String.format(RO, "[%s] [monitor] "
-            + "[T+%6.1f s] %s", LocalTime.now().format(
-                DateTimeFormatter.ofPattern("HH:mm:ss")), s, msg));
+        String line = String.format(RO, "[%s] [monitor] [T+%6.1f s] %s",
+            LocalTime.now().format(
+                DateTimeFormatter.ofPattern("HH:mm:ss")), s, msg);
+        System.out.println(line);
+        if (logFile != null) logFile.println(line);
     }
 }
