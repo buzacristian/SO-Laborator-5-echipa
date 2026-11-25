@@ -108,7 +108,13 @@ public class BrowserLauncher {
         timer.schedule(() -> listTabs(port), Math.min(15,
             Math.max(5, cap / 4)), TimeUnit.SECONDS);
 
-        if (browser.waitFor(limit, TimeUnit.SECONDS))
+        // limita se masoara cu ceasul de perete, ca si in monitor:
+        // nanoTime nu avanseaza cat timp calculatorul e in repaus
+        Instant deadline = started.plusSeconds(limit);
+        boolean exited = false;
+        while (!exited && Instant.now().isBefore(deadline))
+            exited = browser.waitFor(200, TimeUnit.MILLISECONDS);
+        if (exited)
             log("Browserul s-a inchis inainte de limita");
         else
             log("Limita de " + limit + " s a fost atinsa");
